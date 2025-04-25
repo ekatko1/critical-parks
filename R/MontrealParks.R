@@ -2,45 +2,43 @@ library(dplyr)
 library(stringr)
 library(glue)
 library(RCurl)
-
-# sdf = readr::read_csv("Data/batiments-municipaux.csv") |> 
-#   select(buildingName) |> 
-#   mutate(pageName = 
-#            buildingName |> 
-#            tolower() |> 
-#            iconv(to='ASCII//TRANSLIT') |> 
-#            gsub(" st-", " saint-", x=_, fixed=T) |>
-#            gsub(" ", "-", x=_, fixed=T) |>
-#            gsub("(", "", x=_, fixed=T)|>
-#            gsub(")", "", x=_, fixed=T), 
-#          webAddr = paste0("https://montreal.ca/lieux/", pageName)
-#          ) |> 
-#   filter(grepl("chalet", pageName , fixed=T)
-#  ) |> 
-#   mutate(
-#     exists = url.exists(webAddr, timeout = 1)
-#   )
-
-# web_sites = sdf |> pull(webAddr)
-
-# dir.create("Out/")
-readr::write_csv(sdf, "Out/MontrealList.csv")
-
-sdf = sdf |>
-  filter(exists==TRUE)
-
-library(rvest)
 library(purrr)
-pages = sdf |> 
-  pull(webAddr) |> 
+library(rvest)
+
+## Scrape search page for chalets
+srch_pgs = c(1,2) |> 
+  map( 
+    \(p) {
+      paste0("https://montreal.ca/lieux?mtl_content.lieux.installation.code=CHA1&page=",p) |>
+        read_html()
+    } 
+) 
+
+urls = paste0(
+  "https://montreal.ca",
+  
+  srch_pgs |> 
   map(
-    \(webAddr) {
+    \(pg) {
+      pg |> 
+        html_elements(xpath = '//*[contains(concat( " ", @class, " " ), concat( " ", "p-2", " " ))]') |>
+        html_attr("href")
+    }
+  ) |> 
+  c() |> 
+  unlist()
+)
+
+## Scrape each chalet's page
+pages = urls |> 
+  map(
+    \(url) {
       list(
-        webAddr = webAddr,
-        html = read_html(webAddr))
+        webAddr = url,
+        html = read_html(url))
   })
     
-
+## Process Content
 content = pages |>
   map(\(x) {
     elements = x$html |> 
